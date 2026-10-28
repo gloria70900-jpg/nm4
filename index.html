@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>EMDR Dichoptic — Mobile Cardboard / Quest VR</title>
+  <style>
+    html, body { margin:0; padding:0; background:#000; color:#eee; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; height:100%; overflow:hidden; touch-action:none; }
+    #ui { position: fixed; top: 12px; left: 12px; z-index: 10; background: rgba(12, 12, 14, 0.85); backdrop-filter: blur(8px); border:1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 12px 14px; max-width: 440px; max-height: 90vh; overflow-y: auto; line-height: 1.25; }
+    #ui h1 { font-size: 14px; margin: 0 0 6px; font-weight: 700; color:#fff; }
+    #ui h2 { font-size: 12px; margin: 10px 0 6px; font-weight: 700; color:#ff6b6b; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 3px; }
+    #ui .row { display:flex; align-items:center; gap:8px; margin:6px 0; }
+    #ui label { width: 170px; font-size: 11px; color:#ddd; }
+    #ui input[type="range"] { flex:1; accent-color: #ff3b30; }
+    #ui input[type="color"] { width: 44px; height: 24px; padding: 0; border: none; border-radius: 4px; }
+    #ui select, #ui button { background:#1b1b1f; color:#eee; border-radius:6px; border:1px solid #444; padding:6px 8px; font-size:11px; }
+    #ui button { cursor:pointer; }
+    #ui button:hover { background:#2a2a30; }
+
+    /* 모바일 수경 VR 시작 버튼 패널 */
+    .mobile-vr-card { background: rgba(0, 200, 100, 0.15); border: 1px solid #00c864; border-radius: 8px; padding: 8px; margin-bottom: 8px; }
+    #mobileVrBtn { width: 100%; padding: 10px; font-weight: 800; font-size: 12px; background: #008844; color: #fff; border: 1px solid #00ff88; border-radius: 6px; cursor: pointer; }
+    
+    /* 단일 토글 녹화 패널 */
+    .rec-card { background: rgba(255, 59, 48, 0.12); border: 1px solid #ff3b30; border-radius: 8px; padding: 8px; margin-bottom: 8px; }
+    #recToggleBtn { width: 100%; padding: 10px; font-weight: 700; font-size: 12px; background: #c02020; color: #fff; border: 1px solid #ff6666; border-radius: 6px; cursor: pointer; }
+    #recToggleBtn.recording { background: #ff2222; animation: recBlink 1.2s infinite alternate; }
+    @keyframes recBlink { 0% { opacity: 1; } 100% { opacity: 0.45; } }
+    #recStatus { font-size: 11px; color: #ff9999; margin-top: 5px; text-align: center; }
+
+    /* 양안 배율 비대칭 선택 패널 */
+    .aniseikonia-card { background: rgba(0, 150, 255, 0.1); border: 1px solid #0088ff; border-radius: 8px; padding: 8px; margin: 8px 0; }
+    
+    /* 모바일 VR 분할선 및 탈출 힌트 */
+    #vrDivider { display: none; position: fixed; top: 0; left: 50%; width: 2px; height: 100%; background: rgba(255,255,255,0.25); z-index: 5; pointer-events: none; }
+    #exitVrBtn { display: none; position: fixed; top: 12px; right: 12px; z-index: 20; background: rgba(0,0,0,0.6); color: #fff; border: 1px solid #666; border-radius: 20px; padding: 6px 14px; font-size: 12px; cursor: pointer; }
+
+    #fileStatus, #tickStatus, #moveStatus, #vid360Status, #vid2dStatus { font-size: 11px; color:#aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 380px; }
+  </style>
+</head>
+<body>
+
+<div id="vrDivider"></div>
+<button id="exitVrBtn">✕ VR 모드 종료</button>
+
+<div id="ui">
+  <h1>EMDR 3D Globe — Mobile & Quest VR</h1>
+
+  <!-- 모바일 수경(카드보드) 전용 VR 실행 버튼 -->
+  <div class="mobile-vr-card">
+    <button id="mobileVrBtn">🥽 스마트폰 수경 VR 시작 (화면 좌우 분할)</button>
+  </div>
+
+  <!-- 단일 버튼 토글 녹화 모듈 -->
+  <div class="rec-card">
+    <button id="recToggleBtn">🔴 녹화 시작 (Quest: A버튼 / PC: R키)</button>
+    <div id="recStatus">녹화 대기 중 (A 버튼 1개로 토글)</div>
+  </div>
+
+  <!-- 양안 배율 비대칭(Aniseikonia) 교정 모드 -->
+  <div class="aniseikonia-card">
+    <div class="row" style="margin-top:0;">
+      <label style="color:#66b3ff; font-weight:700;">비대칭 시야 검사/교정</label>
+      <select id="asymmPreset" style="flex:1;">
+        <option value="normal">동일 크기 (표준 정상)</option>
+        <option value="leftBig" selected>왼쪽이 더 크게 보이는 사람</option>
+        <option value="rightBig">오른쪽이 더 크게 보이는 사람</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>좌/우안 배율 비 (L vs R)</label>
+      <input id="ratioSlider" type="range" min="0.7" max="1.3" step="0.01" value="0.85" />
+      <span id="ratioText" style="font-size:11px; color:#66b3ff; width:34px; text-align:right;">0.85</span>
+    </div>
+  </div>
+
+  <h2>타깃 구체 & EMDR 모션</h2>
+  <div class="row"><label>타깃 색상</label><input id="color" type="color" value="#5856d6" /></div>
+  <div class="row"><label>크기 (Radius m)</label><input id="size" type="range" min="0.005" max="0.25" step="0.005" value="0.035" /></div>
+  <div class="row"><label>이동 속도</label><input id="speed" type="range" min="0.1" max="3.0" step="0.1" value="0.8" /></div>
+  <div class="row"><label>양끝 머무름(s)</label><input id="dwell" type="range" min="0" max="1.5" step="0.05" value="0.55" /></div>
+  <div class="row"><label>기본 거리(m)</label><input id="base" type="range" min="0.8" max="3.0" step="0.1" value="1.2" /></div>
+  <div class="row"><label>이동 모드</label>
+    <select id="moveMode">
+      <option value="irregularLinear">불규칙 직선 운동 (EMDR Jitter)</option>
+      <option value="smoothHorizontal">수평 왕복 직선 (Standard EMDR)</option>
+      <option value="fullRandom" selected>완전 랜덤 도약</option>
+    </select>
+  </div>
+  <div class="row" style="justify-content:space-between; gap:6px;">
+    <button id="pick" style="flex:1;">새 타깃/위치 리셋</button>
+    <button id="centerMe" style="flex:1;">시야 정면 맞추기</button>
+  </div>
+
+  <h2>배경 오디오</h2>
+  <div class="row"><label>배경 음원</label><input id="audioFile" type="file" accept="audio/*" /></div>
+  <div class="row"><label>배경 볼륨</label><input id="bgVol" type="range" min="0" max="1" step="0.01" value="0.86" /></div>
+  <div id="fileStatus">오디오 미선택</div>
+
+  <h2>틱 사운드 (방향 전환 순간)</h2>
+  <div class="row">
+    <label>프리셋 선택</label>
+    <select id="tickPreset">
+      <option value="beep" selected>1. beep (sine)</option>
+      <option value="click">2. click (short transient)</option>
+      <option value="wood">3. woodblock-like</option>
+      <option value="bell">4. bell (short tone)</option>
+      <option value="none">— 파일 업로드 사용 —</option>
+    </select>
+    <button id="testPreset">미리듣기</button>
+  </div>
+  <div class="row"><label>틱 파일 업로드</label><input id="tickFile" type="file" accept="audio/*" /></div>
+  <div class="row"><label>틱 볼륨</label><input id="tickVol" type="range" min="0" max="1" step="0.01" value="0.86" /></div>
+  <div id="tickStatus">beep 프리셋 기본 활성화됨</div>
+
+  <h2>이동 사운드 (움직일 때만)</h2>
+  <div class="row"><label>이동 사운드</label><input id="moveFile" type="file" accept="audio/*" /></div>
+  <div class="row"><label>이동 볼륨</label><input id="moveVol" type="range" min="0" max="1" step="0.01" value="0.70" /></div>
+  <div id="moveStatus">미선택</div>
+
+  <h2>360° VR 배경 비디오</h2>
+  <div class="row"><label>360 비디오</label><input id="vid360" type="file" accept="video/*" /></div>
+  <div class="row" style="justify-content:space-between; gap:6px;">
+    <button id="play360">재생/일시정지</button>
+    <button id="clear360">배경 비우기</button>
+  </div>
+  <div class="row"><label>360 볼륨</label><input id="vol360" type="range" min="0" max="1" step="0.01" value="0.7" /></div>
+  <div id="vid360Status">미선택</div>
+
+  <h2>2D 비디오 스크린</h2>
+  <div class="row"><label>2D 비디오</label><input id="vid2d" type="file" accept="video/*" /></div>
+  <div class="row" style="justify-content:space-between; gap:6px;">
+    <button id="play2d">재생/일시정지</button>
+    <button id="hide2d">표시/숨김</button>
+  </div>
+  <div class="row"><label>2D 볼륨</label><input id="vol2d" type="range" min="0" max="1" step="0.01" value="0.7" /></div>
+  <div id="vid2dStatus">미선택</div>
+</div>
+
+<script type="module">
+  import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js';
+  import { VRButton } from 'https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/webxr/VRButton.js';
+
+  // ---------- Renderer & Camera ----------
+  const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  renderer.autoClear = false;
+  document.body.appendChild(renderer.domElement);
+  
+  const vrBtnEl = VRButton.createButton(renderer);
+  document.body.appendChild(vrBtnEl);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x020204);
+
+  const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.05, 100);
+  camera.position.set(0, 1.6, 0.0);
+
+  const camLeft = new THREE.PerspectiveCamera(70, (window.innerWidth*0.5)/window.innerHeight, 0.05, 100);
+  const camRight = new THREE.PerspectiveCamera(70, (window.innerWidth*0.5)/window.innerHeight, 0.05, 100);
+  const IPD = 0.064;
+
+  // ---------- Lights ----------
+  const amb = new THREE.AmbientLight(0xffffff, 0.4); scene.add(amb);
+  const key = new THREE.PointLight(0xffffff, 0.8, 0, 2); key.position.set(2, 3, 2); scene.add(key);
+
+  // ---------- Target Globe ----------
+  const geo = new THREE.SphereGeometry(0.03, 32, 32);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x5856d6,
+    emissive: 0x36348e,
+    emissiveIntensity: 0.9,
+    roughness: 0.3,
+    metalness: 0.1
+  });
+  const sphere = new THREE.Mesh(geo, mat);
+  scene.add(sphere);
+
+  // ---------- Parameters ----------
+  const params = {
+    color: '#5856d6',
+    sphereScale: 0.035,
+    moveSpeed: 0.8,
+    dwell: 0.55,
+    base: 1.2,
+    ampx: 0.70,
+    ampy: 0.15,
+    moveMode: 'fullRandom',
+    leftEyeScaleMult: 0.85,  // 기본: 좌안 0.85 (확실한 축소)
+    rightEyeScaleMult: 1.15, // 기본: 우안 1.15 (확실한 확대, 총 0.30 차이)
+  };
+
+  let currentTarget = new THREE.Vector3();
+  const tmpPos = new THREE.Vector3();
+  const tmpDir = new THREE.Vector3();
+  let waitingAtTarget = false;
+  let turnReadyAt = 0;
+  const arrivalThreshSq = 0.02 * 0.02;
+  let linearDir = 1;
+
+  let isMobileVr = false;
+  let deviceEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+  function computeCenter(out){
+    const xrCam = renderer.xr.isPresenting ? renderer.xr.getCamera(camera) : camera;
+    xrCam.getWorldPosition(tmpPos);
+    xrCam.getWorldDirection(tmpDir);
+    out.copy(tmpPos).add(tmpDir.multiplyScalar(params.base));
+  }
+
+  function pickNewTarget(init=false){
+    const center = new THREE.Vector3();
+    computeCenter(center);
+
+    if (params.moveMode === 'smoothHorizontal') {
+      linearDir *= -1;
+      currentTarget.copy(center).add(new THREE.Vector3(linearDir * params.ampx, 0, 0));
+    } else if (params.moveMode === 'irregularLinear') {
+      linearDir *= -1;
+      const yOffset = THREE.MathUtils.randFloatSpread(params.ampy * 2);
+      const zOffset = THREE.MathUtils.randFloatSpread(0.1);
+      const xOffset = linearDir * (params.ampx * (0.8 + Math.random() * 0.4));
+      currentTarget.copy(center).add(new THREE.Vector3(xOffset, yOffset, zOffset));
+    } else {
+      currentTarget.copy(center).add(new THREE.Vector3(
+        THREE.MathUtils.randFloatSpread(params.ampx * 2),
+        THREE.MathUtils.randFloatSpread(params.ampy * 2),
+        THREE.MathUtils.randFloatSpread(0.15)
+      ));
+    }
+    if (init) sphere.position.copy(currentTarget);
+  }
+
+  pickNewTarget(true);
+  pickNewTarget(false);
+
+  // ---------- UI Wiring ----------
+  const $ = (sel)=>document.querySelector(sel);
+  const uiPanel = $('#ui');
+  const vrDivider = $('#vrDivider');
+  const exitVrBtn = $('#exitVrBtn');
+  const mobileVrBtn = $('#mobileVrBtn');
+
+  const colorEl = $('#color');
+  const sizeEl = $('#size');
+  const speedEl = $('#speed');
+  const dwellEl = $('#dwell');
+  const baseEl = $('#base');
+  const moveModeEl = $('#moveMode');
+  const pickBtn = $('#pick');
+  const centerBtn = $('#centerMe');
+  const asymmPreset = $('#asymmPreset');
+  const ratioSlider = $('#ratioSlider');
+  const ratioText = $('#ratioText');
+
+  function applyAppearance(){
+    const baseRadius = 0.03;
+    const desiredR = Math.max(0.005, Number(params.sphereScale));
+    const scaleFactor = desiredR / baseRadius;
+    sphere.scale.setScalar(scaleFactor);
+    const c = new THREE.Color(params.color);
+    mat.color.set(c);
+    mat.emissive.set(c.clone().multiplyScalar(0.6));
+  }
+
+  colorEl.addEventListener('input', e=>{ params.color=e.target.value; applyAppearance(); });
+  sizeEl.addEventListener('input',  e=>{ params.sphereScale=Number(e.target.value); applyAppearance(); });
+  speedEl.addEventListener('input', e=>{ params.moveSpeed=Number(e.target.value); });
+  dwellEl.addEventListener('input', e=>{ params.dwell=Number(e.target.value); });
+  baseEl.addEventListener('input',  e=>{ params.base=Number(e.target.value); pickNewTarget(false); });
+  moveModeEl.addEventListener('change', ()=>{ params.moveMode=moveModeEl.value; pickNewTarget(false); });
+  pickBtn.addEventListener('click', ()=>{ if (audioCtx.state==='suspended') audioCtx.resume(); pickNewTarget(true); });
+  centerBtn.addEventListener('click', ()=>{ pickNewTarget(true); });
+
+  // [수정 핵심] 선형 편차를 직접 적용하여 확실한 배율 차이 형성
+  function updateAsymmetry(val) {
+    ratioSlider.value = val.toFixed(2);
+    ratioText.textContent = val.toFixed(2);
+    
+    if (Math.abs(val - 1.0) < 0.001) {
+      params.leftEyeScaleMult = 1.0;
+      params.rightEyeScaleMult = 1.0;
+    } else if (val < 1.0) {
+      // 왼쪽이 크게 보이는 사람: 왼쪽을 줄이고, 오른쪽을 키움 (0.85 설정 시: 좌 0.85, 우 1.15 -> 0.30 차이)
+      const diff = 1.0 - val;
+      params.leftEyeScaleMult = 1.0 - diff;
+      params.rightEyeScaleMult = 1.0 + diff;
+    } else {
+      // 오른쪽이 크게 보이는 사람: 오른쪽을 줄이고, 왼쪽을 키움
+      const diff = val - 1.0;
+      params.leftEyeScaleMult = 1.0 + diff;
+      params.rightEyeScaleMult = 1.0 - diff;
+    }
+  }
+
+  asymmPreset.addEventListener('change', () => {
+    if (asymmPreset.value === 'leftBig') updateAsymmetry(0.85);
+    else if (asymmPreset.value === 'rightBig') updateAsymmetry(1.15);
+    else updateAsymmetry(1.00);
+  });
+
+  ratioSlider.addEventListener('input', (e) => {
+    updateAsymmetry(Number(e.target.value));
+  });
+
+  // ---------- 스마트폰 모바일 수경 VR (Cardboard SBS) 모듈 ----------
+  function startMobileVR(){
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission().then(state => {
+        if (state === 'granted') window.addEventListener('deviceorientation', handleOrientation);
+      }).catch(console.error);
+    } else {
+      window.addEventListener('deviceorientation', handleOrientation);
+    }
+
+    const docEl = document.documentElement;
+    if (docEl.requestFullscreen) docEl.requestFullscreen().catch(()=>{});
+    else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+
+    isMobileVr = true;
+    uiPanel.style.display = 'none';
+    vrDivider.style.display = 'block';
+    exitVrBtn.style.display = 'block';
+    onResize();
+  }
+
+  function stopMobileVR(){
+    isMobileVr = false;
+    uiPanel.style.display = 'block';
+    vrDivider.style.display = 'none';
+    exitVrBtn.style.display = 'none';
+    window.removeEventListener('deviceorientation', handleOrientation);
+    if (document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+    onResize();
+  }
+
+  mobileVrBtn.addEventListener('click', startMobileVR);
+  exitVrBtn.addEventListener('click', stopMobileVR);
+
+  function handleOrientation(e){
+    if (!e.alpha) return;
+    const alpha = THREE.MathUtils.degToRad(e.alpha);
+    const beta = THREE.MathUtils.degToRad(e.beta);
+    const gamma = THREE.MathUtils.degToRad(e.gamma);
+    deviceEuler.set(beta, alpha, -gamma, 'YXZ');
+    camera.quaternion.setFromEuler(deviceEuler);
+  }
+
+  function onResize(){
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    renderer.setSize(w, h);
+    if(isMobileVr){
+      camLeft.aspect = (w * 0.5) / h;
+      camLeft.updateProjectionMatrix();
+      camRight.aspect = (w * 0.5) / h;
+      camRight.updateProjectionMatrix();
+    } else {
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+  }
+  window.addEventListener('resize', onResize);
+
+  // ---------- Audio: Web Audio & Recording Mixer Bus ----------
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioContextClass();
+  window.addEventListener('pointerdown', ()=>{ if (audioCtx.state==='suspended') audioCtx.resume(); }, { once:true });
+
+  const audioStreamDest = audioCtx.createMediaStreamDestination();
+  const masterRecordGain = audioCtx.createGain();
+  masterRecordGain.gain.value = 1.0;
+  masterRecordGain.connect(audioCtx.destination);
+  masterRecordGain.connect(audioStreamDest);
+
+  // Background Audio
+  const audioEl = new Audio(); audioEl.loop = true;
+  let bgSourceNode = null;
+  const bgGain = audioCtx.createGain(); bgGain.gain.value = 0.86;
+  bgGain.connect(masterRecordGain);
+  const audioFile = $('#audioFile'); const fileStatus=$('#fileStatus'); const bgVol=$('#bgVol');
+  audioFile.addEventListener('change', ()=>{
+    const f=audioFile.files && audioFile.files[0];
+    if(!f){ fileStatus.textContent='오디오 미선택'; return; }
+    audioEl.src = URL.createObjectURL(f);
+    if(!bgSourceNode){ bgSourceNode=audioCtx.createMediaElementSource(audioEl); bgSourceNode.connect(bgGain); }
+    audioEl.play().then(()=>{ fileStatus.textContent=`재생 중: ${f.name}`; if(audioCtx.state==='suspended') audioCtx.resume(); }).catch(()=>{ fileStatus.textContent=`로드됨: ${f.name}`; });
+  });
+  bgVol.addEventListener('input', e=>{ bgGain.gain.value=Number(e.target.value); });
+
+  // Tick Sound (Beep)
+  const tickGain = audioCtx.createGain(); tickGain.gain.value = 0.86;
+  tickGain.connect(masterRecordGain);
+  let tickBuffer=null;
+  const tickFile=$('#tickFile'); const tickVol=$('#tickVol'); const tickStatus=$('#tickStatus');
+  const tickPresetEl=$('#tickPreset'); const testPresetBtn=$('#testPreset');
+  tickFile.addEventListener('change', async ()=>{
+    const f=tickFile.files && tickFile.files[0]; if(!f) return;
+    try{ tickBuffer=await audioCtx.decodeAudioData(await f.arrayBuffer()); tickStatus.textContent=`로드됨: ${f.name}`; } catch(e){ tickBuffer=null; }
+  });
+  tickVol.addEventListener('input', e=>{ tickGain.gain.value=Number(e.target.value); });
+
+  function makeNoiseBuffer(sec){
+    const len=Math.max(1,Math.floor(audioCtx.sampleRate*sec)); const buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate); const d=buf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i]=Math.random()*2-1; return buf;
+  }
+  function playTickSound(){
+    const p = tickPresetEl.value; const t = audioCtx.currentTime;
+    if(p === 'click'){
+      const s=audioCtx.createBufferSource(); s.buffer=makeNoiseBuffer(0.015);
+      const hp=audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1400;
+      const g=audioCtx.createGain(); g.gain.setValueAtTime(0.001,t); g.gain.linearRampToValueAtTime(1.0,t+0.002); g.gain.exponentialRampToValueAtTime(0.001,t+0.03);
+      s.connect(hp).connect(g).connect(tickGain); s.start(t); s.stop(t+0.035);
+    } else if(p === 'beep'){
+      const o=audioCtx.createOscillator(); o.frequency.setValueAtTime(880,t);
+      const g=audioCtx.createGain(); g.gain.setValueAtTime(0.001,t); g.gain.linearRampToValueAtTime(1.0,t+0.005); g.gain.exponentialRampToValueAtTime(0.001,t+0.1);
+      o.connect(g).connect(tickGain); o.start(t); o.stop(t+0.12);
+    } else if(p === 'wood'){
+      const s=audioCtx.createBufferSource(); s.buffer=makeNoiseBuffer(0.05);
+      const bp=audioCtx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1500; bp.Q.value=20;
+      const g=audioCtx.createGain(); g.gain.setValueAtTime(0.001,t); g.gain.linearRampToValueAtTime(1.0,t+0.002); g.gain.exponentialRampToValueAtTime(0.001,t+0.05);
+      s.connect(bp).connect(g).connect(tickGain); s.start(t); s.stop(t+0.06);
+    } else if(p === 'bell'){
+      const o=audioCtx.createOscillator(); o.frequency.setValueAtTime(1200,t);
+      const g=audioCtx.createGain(); g.gain.setValueAtTime(0.001,t); g.gain.linearRampToValueAtTime(1.0,t+0.005); g.gain.exponentialRampToValueAtTime(0.001,t+0.35);
+      o.connect(g).connect(tickGain); o.start(t); o.stop(t+0.4);
+    } else if(tickBuffer){
+      const s=audioCtx.createBufferSource(); s.buffer=tickBuffer; s.connect(tickGain); try{ s.start(0); }catch{}
+    }
+  }
+  testPresetBtn.addEventListener('click', ()=>{ if (audioCtx.state==='suspended') audioCtx.resume(); playTickSound(); });
+
+  // Move Sound
+  const moveEl = new Audio(); moveEl.loop = true;
+  let moveSrcNode = null; const moveGain = audioCtx.createGain(); moveGain.gain.value = 0.70; moveGain.connect(masterRecordGain);
+  const moveFile = $('#moveFile'); const moveVol = $('#moveVol'); const moveStatus = $('#moveStatus');
+  if(moveFile){
+    moveFile.addEventListener('change', ()=>{
+      const f=moveFile.files && moveFile.files[0]; if(!f) return;
+      moveEl.src = URL.createObjectURL(f);
+      if(!moveSrcNode){ moveSrcNode=audioCtx.createMediaElementSource(moveEl); moveSrcNode.connect(moveGain); }
+      moveStatus.textContent = `로드됨: ${f.name}`;
+    });
+  }
+  if(moveVol) moveVol.addEventListener('input', e=>{ moveGain.gain.value=Number(e.target.value); });
+  function updateMoveSound(isMoving){
+    if(!moveEl.src) return;
+    if(isMoving){ if(moveEl.paused) moveEl.play().catch(()=>{}); }
+    else { if(!moveEl.paused){ moveEl.pause(); try{ moveEl.currentTime=0; }catch{} } }
+  }
+
+  // 360 Video Background
+  const vid360El=document.createElement('video'); vid360El.crossOrigin='anonymous'; vid360El.playsInline=true; vid360El.loop=true;
+  let vid360Tex=null; let vid360SrcNode=null; const gain360=audioCtx.createGain(); gain360.gain.value=0.7; gain360.connect(masterRecordGain);
+  const vid360Input=$('#vid360'); const play360Btn=$('#play360'); const clear360Btn=$('#clear360'); const vol360=$('#vol360'); const vid360Status=$('#vid360Status');
+  vid360Input.addEventListener('change', ()=>{
+    const f=vid360Input.files && vid360Input.files[0]; if(!f) return;
+    vid360El.src = URL.createObjectURL(f); vid360El.load();
+    vid360Tex = new THREE.VideoTexture(vid360El); vid360Tex.mapping = THREE.EquirectangularReflectionMapping;
+    scene.background = vid360Tex;
+    if(!vid360SrcNode){ vid360SrcNode=audioCtx.createMediaElementSource(vid360El); vid360SrcNode.connect(gain360); }
+    vid360El.play().catch(()=>{}); vid360Status.textContent = `재생 중: ${f.name}`;
+  });
+  play360Btn.addEventListener('click', ()=>{ if(vid360El.paused) vid360El.play(); else vid360El.pause(); });
+  clear360Btn.addEventListener('click', ()=>{ scene.background=new THREE.Color(0x020204); try{ vid360El.pause(); vid360El.src=''; }catch{} vid360Status.textContent='배경 비움'; });
+  vol360.addEventListener('input', e=>{ gain360.gain.value=Number(e.target.value); });
+
+  // 2D Video Screen
+  const screenGroup=new THREE.Group(); scene.add(screenGroup);
+  const screenGeo=new THREE.PlaneGeometry(2.4,1.35,1,1); const screenMat=new THREE.MeshBasicMaterial({ color:0xffffff, side:THREE.DoubleSide });
+  const screenMesh=new THREE.Mesh(screenGeo, screenMat); screenGroup.add(screenMesh); screenGroup.visible=false;
+  let vid2dEl=document.createElement('video'); vid2dEl.crossOrigin='anonymous'; vid2dEl.playsInline=true; vid2dEl.loop=true;
+  let vid2dTex=null; let vid2dSrcNode=null; const gain2d=audioCtx.createGain(); gain2d.gain.value=0.7; gain2d.connect(masterRecordGain);
+  const vid2dInput=$('#vid2d'); const play2dBtn=$('#play2d'); const hide2dBtn=$('#hide2d'); const vol2d=$('#vol2d'); const vid2dStatus=$('#vid2dStatus');
+  vid2dInput.addEventListener('change', ()=>{
+    const f=vid2dInput.files && vid2dInput.files[0]; if(!f) return;
+    vid2dEl.src = URL.createObjectURL(f); vid2dEl.load();
+    vid2dTex = new THREE.VideoTexture(vid2dEl); screenMat.map = vid2dTex; screenMat.needsUpdate=true;
+    if(!vid2dSrcNode){ vid2dSrcNode=audioCtx.createMediaElementSource(vid2dEl); vid2dSrcNode.connect(gain2d); }
+    screenGroup.visible=true; vid2dEl.play().catch(()=>{}); vid2dStatus.textContent = `재생 중: ${f.name}`;
+  });
+  play2dBtn.addEventListener('click', ()=>{ if(vid2dEl.paused) vid2dEl.play(); else vid2dEl.pause(); });
+  hide2dBtn.addEventListener('click', ()=>{ screenGroup.visible = !screenGroup.visible; });
+  vol2d.addEventListener('input', e=>{ gain2d.gain.value=Number(e.target.value); });
+
+  // ==========================================
+  // 단일 버튼 토글 화면 녹화 모듈
+  // ==========================================
+  const recToggleBtn = $('#recToggleBtn');
+  const recStatus = $('#recStatus');
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let isRecording = false;
+  let recordStartTime = 0;
+
+  const recHudCanvas = document.createElement('canvas'); recHudCanvas.width = 256; recHudCanvas.height = 64;
+  const recHudCtx = recHudCanvas.getContext('2d');
+  const recHudTex = new THREE.CanvasTexture(recHudCanvas);
+  const recHudMat = new THREE.MeshBasicMaterial({ map: recHudTex, transparent: true });
+  const recHudMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.06), recHudMat);
+  recHudMesh.visible = false;
+  scene.add(recHudMesh);
+
+  function drawRecHud(text, blink){
+    recHudCtx.clearRect(0,0,256,64);
+    if (!blink) return;
+    recHudCtx.fillStyle = 'rgba(0,0,0,0.65)';
+    recHudCtx.roundRect ? recHudCtx.roundRect(8,6,240,52,10) : recHudCtx.rect(8,6,240,52);
+    recHudCtx.fill();
+
+    recHudCtx.fillStyle = '#ff3333';
+    recHudCtx.beginPath();
+    recHudCtx.arc(32,32,9,0,Math.PI*2);
+    recHudCtx.fill();
+
+    recHudCtx.font = 'bold 20px sans-serif';
+    recHudCtx.fillStyle = '#ffffff';
+    recHudCtx.textBaseline = 'middle';
+    recHudCtx.fillText(text, 52, 32);
+    recHudTex.needsUpdate = true;
+  }
+
+  function getBestSupportedMimeType(){
+    const candidates = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=h264', 'video/webm'];
+    for(const t of candidates){
+      if(window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return '';
+  }
+
+  function toggleRecording(){
+    if (isRecording) {
+      isRecording = false;
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+      recStatus.textContent = '인코딩 및 MP4 파일 저장 중...';
+      recToggleBtn.classList.remove('recording');
+      recToggleBtn.textContent = '🔴 녹화 시작 (Quest: A버튼 / PC: R키)';
+      recHudMesh.visible = false;
+    } else {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      try {
+        const canvasStream = renderer.domElement.captureStream(30);
+        const audioTracks = audioStreamDest.stream.getAudioTracks();
+        const tracks = [...canvasStream.getVideoTracks()];
+        if (audioTracks.length > 0) tracks.push(audioTracks[0]);
+        const combinedStream = new MediaStream(tracks);
+
+        const mime = getBestSupportedMimeType();
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(combinedStream, mime ? { mimeType: mime, videoBitsPerSecond: 6000000 } : {});
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const isMp4 = mediaRecorder.mimeType && mediaRecorder.mimeType.includes('mp4');
+          const ext = isMp4 ? 'mp4' : 'webm';
+          const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/mp4' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          const dateStr = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+          a.download = `EMDR_Globe_${dateStr}.${ext}`;
+          a.href = url;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+          recStatus.textContent = `저장 완료: EMDR_Globe_${dateStr}.${ext}`;
+        };
+
+        mediaRecorder.start(1000);
+        isRecording = true;
+        recordStartTime = performance.now();
+        recToggleBtn.classList.add('recording');
+        recToggleBtn.textContent = '⏹️ 녹화 중지 & 다운로드 (A버튼 토글)';
+        recStatus.textContent = '● 녹화 중... (A 버튼을 다시 누르면 완료)';
+        recHudMesh.visible = true;
+      } catch (err) {
+        recStatus.textContent = '녹화 시작 실패: ' + err.message;
+      }
+    }
+  }
+
+  recToggleBtn.addEventListener('click', toggleRecording);
+  window.addEventListener('keydown', (e)=>{ if(e.code === 'KeyR') toggleRecording(); });
+
+  let lastButtonPress = false;
+  function handleQuestSingleButton(){
+    const session = renderer.xr.getSession();
+    if (!session || !session.inputSources) return;
+
+    for (const source of session.inputSources) {
+      if (source && source.gamepad && source.gamepad.buttons) {
+        const btn = source.gamepad.buttons[4];
+        if (btn) {
+          const pressed = btn.pressed || btn.value > 0.5;
+          if (pressed && !lastButtonPress) toggleRecording();
+          lastButtonPress = pressed;
+        }
+      }
+    }
+  }
+
+  // ---------- Animation & Eye-Specific Dichoptic Loop ----------
+  const clock = new THREE.Clock();
+  applyAppearance();
+
+  renderer.setAnimationLoop(() => {
+    const dt = clock.getDelta();
+    const now = performance.now();
+
+    const followRate = THREE.MathUtils.lerp(2.0, 7.0, THREE.MathUtils.clamp(params.moveSpeed, 0.1, 3.0));
+    sphere.position.lerp(currentTarget, THREE.MathUtils.clamp(dt * followRate, 0, 1));
+
+    const pulse = 1.0 + Math.sin(now * 0.003) * 0.04;
+    const baseR = Math.max(0.005, Number(params.sphereScale));
+    const nominalScale = (baseR / 0.03) * pulse;
+
+    const distSq = sphere.position.distanceToSquared(currentTarget);
+    const arrived = distSq < arrivalThreshSq;
+    const movingNow = !waitingAtTarget && distSq >= (arrivalThreshSq * 0.25);
+    updateMoveSound(movingNow);
+
+    if (arrived && !waitingAtTarget) {
+      waitingAtTarget = true;
+      turnReadyAt = now + params.dwell * 1000;
+      playTickSound();
+    }
+    if (waitingAtTarget && now >= turnReadyAt) {
+      waitingAtTarget = false;
+      pickNewTarget(false);
+    }
+
+    // [수정 핵심] 렌더링 루프 분기: 모바일 수경 VR (SBS)
+    if (isMobileVr) {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const halfWidth = Math.floor(width * 0.5);
+
+      renderer.clear();
+
+      camLeft.position.copy(camera.position);
+      camRight.position.copy(camera.position);
+      camLeft.quaternion.copy(camera.quaternion);
+      camRight.quaternion.copy(camera.quaternion);
+
+      camLeft.translateX(-IPD * 0.5);
+      camRight.translateX(IPD * 0.5);
+
+      // --- 좌안 렌더링: 0.85배로 확실히 작게 & 즉시 행렬 갱신 ---
+      sphere.scale.setScalar(nominalScale * params.leftEyeScaleMult);
+      sphere.updateMatrixWorld(true);
+      renderer.setViewport(0, 0, halfWidth, height);
+      renderer.setScissor(0, 0, halfWidth, height);
+      renderer.setScissorTest(true);
+      renderer.render(scene, camLeft);
+
+      // --- 우안 렌더링: 1.15배로 확실히 크게 & 즉시 행렬 갱신 ---
+      sphere.scale.setScalar(nominalScale * params.rightEyeScaleMult);
+      sphere.updateMatrixWorld(true);
+      renderer.setViewport(halfWidth, 0, halfWidth, height);
+      renderer.setScissor(halfWidth, 0, halfWidth, height);
+      renderer.setScissorTest(true);
+      renderer.render(scene, camRight);
+
+      renderer.setScissorTest(false);
+
+    } else if (renderer.xr.isPresenting) {
+      // ===== [오큘러스 퀘스트 WebXR 모드] =====
+      handleQuestSingleButton();
+      sphere.scale.setScalar(nominalScale);
+
+      if (isRecording && recHudMesh.visible) {
+        const xrCam = renderer.xr.getCamera(camera);
+        xrCam.getWorldPosition(tmpPos);
+        xrCam.getWorldDirection(tmpDir);
+        recHudMesh.position.copy(tmpPos).add(tmpDir.multiplyScalar(1.0)).add(new THREE.Vector3(0, 0.32, 0));
+        recHudMesh.quaternion.copy(xrCam.quaternion);
+
+        const sec = Math.floor((now - recordStartTime) / 1000);
+        const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+        const ss = String(sec % 60).padStart(2, '0');
+        drawRecHud(`REC  ${mm}:${ss}`, Math.floor(now / 500) % 2 === 0);
+      }
+      renderer.render(scene, camera);
+
+    } else {
+      // ===== [일반 2D 데스크톱/모바일 모드] =====
+      sphere.scale.setScalar(nominalScale);
+      renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+      renderer.render(scene, camera);
+    }
+  });
+</script>
+</body>
+</html>
